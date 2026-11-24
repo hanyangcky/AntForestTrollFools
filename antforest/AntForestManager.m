@@ -5898,6 +5898,9 @@ static BOOL isManorChanceTask(NSString *bizKey, NSString *title, NSDictionary *t
         }
         
         if ([status isEqualToString:@"RECEIVED"]) {
+            if (isChanceTask) {
+                [self recordStage:[NSString stringWithFormat:@"🐔 抽抽乐：任务“%@”机会已到账（状态 RECEIVED），无需重复领取", title]];
+            }
             if ([bizKey isEqualToString:@"ANSWER"]) {
                 NSString *today = getCurrentDateString();
                 [[NSUserDefaults standardUserDefaults] setObject:today forKey:@"lastManorAnswerDate"];
@@ -5958,11 +5961,17 @@ static BOOL isManorChanceTask(NSString *bizKey, NSString *title, NSDictionary *t
                 [bizKey containsString:@"ZhangDanTZ"] || [title containsString:@"信用卡"] ||
                 [bizKey isEqualToString:@"JINGTAN_FEED_FISH"] ||
                 [desc containsString:@"捐"] || [desc containsString:@"付款"] || [desc containsString:@"支付"] || [desc containsString:@"实付"]) {
+                if (isChanceTask) {
+                    [self recordStage:[NSString stringWithFormat:@"🐔 抽抽乐：任务“%@”涉及付款/公益等敏感操作，按安全策略跳过", title]];
+                }
                 continue;
             }
             
             // 过滤纯游戏玩局类任务 (Game / Game_Charge)
             if ([cat isEqualToString:@"Game"] || [cat isEqualToString:@"Game_Charge"]) {
+                if (isChanceTask) {
+                    [self recordStage:[NSString stringWithFormat:@"🐔 抽抽乐：任务“%@”为游戏类，按安全策略跳过", title]];
+                }
                 continue;
             }
             
@@ -5984,7 +5993,11 @@ static BOOL isManorChanceTask(NSString *bizKey, NSString *title, NSDictionary *t
                         [self doManorFarmTaskWithBizKey:bizKey];
                     });
                     taskDelayIndex++;
+                } else if (isChanceTask) {
+                    [self recordStage:[NSString stringWithFormat:@"🐔 抽抽乐：任务“%@”今日已处理过，跳过重复执行", title]];
                 }
+            } else if (isChanceTask) {
+                [self recordStage:[NSString stringWithFormat:@"🐔 抽抽乐：任务“%@”模式“%@”不可自动触发，跳过", title, mode]];
             }
         }
     }
