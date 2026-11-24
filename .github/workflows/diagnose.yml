@@ -1,0 +1,10 @@
+name: Diagnose runner
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "ubuntu runner works"
