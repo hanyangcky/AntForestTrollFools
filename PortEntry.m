@@ -6,6 +6,7 @@
 
 #import "antforest/AntForestManager.h"
 #import "antforest/StepSimulator.h"
+#import "antforest/AFChanceLedger.h"
 
 static void (*originalViewDidLoad)(id, SEL);
 static void (*originalViewDidAppear)(id, SEL, BOOL);
@@ -892,6 +893,7 @@ static void installEarnEnergyCollector(id controller) {
 
 @interface AntForestSettingsPanel : UIViewController
 @property (nonatomic, strong) UIButton *rewardButton;
+@property (nonatomic, strong) UILabel *chanceValueLabel;
 @end
 
 @interface AntForestWaterPanel : UIViewController <UITableViewDataSource, UITableViewDelegate, UISearchResultsUpdating>
@@ -1526,6 +1528,54 @@ static void installEarnEnergyCollector(id controller) {
     contentView.translatesAutoresizingMaskIntoConstraints = NO;
     [scrollView addSubview:contentView];
     
+    // 抽奖机会账本卡片（只记录不抽奖）
+    UIView *chanceCard = [[UIView alloc] init];
+    chanceCard.backgroundColor = UIColor.systemBackgroundColor;
+    chanceCard.layer.cornerRadius = 16;
+    chanceCard.translatesAutoresizingMaskIntoConstraints = NO;
+    [contentView addSubview:chanceCard];
+
+    UILabel *chanceTitle = [[UILabel alloc] init];
+    chanceTitle.text = @"🎟️ 抽奖机会账本";
+    chanceTitle.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+    chanceTitle.textColor = UIColor.labelColor;
+    chanceTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    [chanceCard addSubview:chanceTitle];
+
+    UILabel *chanceDetail = [[UILabel alloc] init];
+    chanceDetail.text = @"只记录机会数，不自动抽奖";
+    chanceDetail.font = [UIFont systemFontOfSize:11];
+    chanceDetail.textColor = UIColor.secondaryLabelColor;
+    chanceDetail.translatesAutoresizingMaskIntoConstraints = NO;
+    [chanceCard addSubview:chanceDetail];
+
+    self.chanceValueLabel = [[UILabel alloc] init];
+    self.chanceValueLabel.font = [UIFont monospacedDigitSystemFontOfSize:28 weight:UIFontWeightBold];
+    self.chanceValueLabel.textColor = [UIColor colorWithRed:0.07 green:0.31 blue:0.18 alpha:1.0];
+    self.chanceValueLabel.textAlignment = NSTextAlignmentRight;
+    self.chanceValueLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [chanceCard addSubview:self.chanceValueLabel];
+    [self refreshChanceDisplay];
+
+    UIButton *resetChance = [UIButton buttonWithType:UIButtonTypeSystem];
+    [resetChance setTitle:@"清零显示" forState:UIControlStateNormal];
+    resetChance.titleLabel.font = [UIFont systemFontOfSize:12];
+    [resetChance addTarget:self action:@selector(resetChanceDisplay) forControlEvents:UIControlEventTouchUpInside];
+    resetChance.translatesAutoresizingMaskIntoConstraints = NO;
+    [chanceCard addSubview:resetChance];
+
+    UIButton *chanceLogs = [UIButton buttonWithType:UIButtonTypeSystem];
+    [chanceLogs setTitle:@"记录" forState:UIControlStateNormal];
+    chanceLogs.titleLabel.font = [UIFont systemFontOfSize:12];
+    [chanceLogs addTarget:self action:@selector(showChanceLogs) forControlEvents:UIControlEventTouchUpInside];
+    chanceLogs.translatesAutoresizingMaskIntoConstraints = NO;
+    [chanceCard addSubview:chanceLogs];
+
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(chanceDidUpdate:)
+                                               name:@"AFChanceLedgerDidUpdate"
+                                             object:nil];
+
     UIButton *schedule = [self settingsButtonWithTitle:@"定时收取设置" detail:@"管理每日固定收取时刻" icon:@"calendar" action:@selector(showSchedule)];
     UIButton *step = [self settingsButtonWithTitle:@"步数模拟设置" detail:@"独立配置支付宝可见步数" icon:@"figure.walk" action:@selector(showStepSimulator)];
     UIButton *water = [self settingsButtonWithTitle:@"好友浇水设置" detail:@"选择好友、克数与定时任务" icon:@"drop.fill" action:@selector(showWater)];
@@ -1563,7 +1613,14 @@ static void installEarnEnergyCollector(id controller) {
         [contentView.bottomAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.bottomAnchor],
         [contentView.widthAnchor constraintEqualToAnchor:scrollView.frameLayoutGuide.widthAnchor],
         
-        [schedule.topAnchor constraintEqualToAnchor:contentView.topAnchor constant:16], [schedule.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor constant:16], [schedule.trailingAnchor constraintEqualToAnchor:contentView.trailingAnchor constant:-16], [schedule.heightAnchor constraintEqualToConstant:70],
+        [chanceCard.topAnchor constraintEqualToAnchor:contentView.topAnchor constant:16], [chanceCard.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor constant:16], [chanceCard.trailingAnchor constraintEqualToAnchor:contentView.trailingAnchor constant:-16], [chanceCard.heightAnchor constraintEqualToConstant:96],
+        [chanceTitle.topAnchor constraintEqualToAnchor:chanceCard.topAnchor constant:14], [chanceTitle.leadingAnchor constraintEqualToAnchor:chanceCard.leadingAnchor constant:16],
+        [chanceDetail.topAnchor constraintEqualToAnchor:chanceTitle.bottomAnchor constant:4], [chanceDetail.leadingAnchor constraintEqualToAnchor:chanceTitle.leadingAnchor],
+        [self.chanceValueLabel.topAnchor constraintEqualToAnchor:chanceCard.topAnchor constant:12], [self.chanceValueLabel.trailingAnchor constraintEqualToAnchor:chanceCard.trailingAnchor constant:-16], [self.chanceValueLabel.widthAnchor constraintEqualToConstant:110],
+        [resetChance.bottomAnchor constraintEqualToAnchor:chanceCard.bottomAnchor constant:-12], [resetChance.trailingAnchor constraintEqualToAnchor:chanceCard.trailingAnchor constant:-16],
+        [chanceLogs.bottomAnchor constraintEqualToAnchor:chanceCard.bottomAnchor constant:-12], [chanceLogs.trailingAnchor constraintEqualToAnchor:resetChance.leadingAnchor constant:-8],
+
+        [schedule.topAnchor constraintEqualToAnchor:chanceCard.bottomAnchor constant:12], [schedule.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor constant:16], [schedule.trailingAnchor constraintEqualToAnchor:contentView.trailingAnchor constant:-16], [schedule.heightAnchor constraintEqualToConstant:70],
         [step.topAnchor constraintEqualToAnchor:schedule.bottomAnchor constant:12], [step.leadingAnchor constraintEqualToAnchor:schedule.leadingAnchor], [step.trailingAnchor constraintEqualToAnchor:schedule.trailingAnchor], [step.heightAnchor constraintEqualToConstant:70],
         [water.topAnchor constraintEqualToAnchor:step.bottomAnchor constant:12], [water.leadingAnchor constraintEqualToAnchor:schedule.leadingAnchor], [water.trailingAnchor constraintEqualToAnchor:schedule.trailingAnchor], [water.heightAnchor constraintEqualToConstant:70],
         [revive.topAnchor constraintEqualToAnchor:water.bottomAnchor constant:12], [revive.leadingAnchor constraintEqualToAnchor:schedule.leadingAnchor], [revive.trailingAnchor constraintEqualToAnchor:schedule.trailingAnchor], [revive.heightAnchor constraintEqualToConstant:70],
@@ -1609,6 +1666,43 @@ static void installEarnEnergyCollector(id controller) {
     ]];
     if (chevron) [NSLayoutConstraint activateConstraints:@[[chevron.trailingAnchor constraintEqualToAnchor:button.trailingAnchor constant:-18], [chevron.centerYAnchor constraintEqualToAnchor:button.centerYAnchor]]];
     return button;
+}
+
+#pragma mark - 抽奖机会账本 UI
+
+- (void)refreshChanceDisplay {
+    if (!self.chanceValueLabel) return;
+    AFChanceLedger *ledger = AFChanceLedger.sharedInstance;
+    self.chanceValueLabel.text = [NSString stringWithFormat:@"%ld 次", (long)ledger.availableChance];
+}
+
+- (void)chanceDidUpdate:(NSNotification *)note {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self refreshChanceDisplay];
+    });
+}
+
+- (void)resetChanceDisplay {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"清零本地显示？"
+                                                                   message:@"只会把面板上的次数清零，不会影响支付宝服务端的真实抽奖机会。下一次进入活动页、服务端回包后会重新同步。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"确认清零" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [AFChanceLedger.sharedInstance resetLocalDisplay];
+        [weakSelf refreshChanceDisplay];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showChanceLogs {
+    NSArray<NSString *> *logs = [AFChanceLedger recentLogs];
+    NSString *body = logs.count ? [logs componentsJoinedByString:@"\n"] : @"暂无记录。\n进入寻宝/抽抽乐页面，机会数变化后会自动记录在这里。";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"机会数变化记录"
+                                                                   message:body
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)showSchedule { [self.navigationController pushViewController:[[AntForestSchedulePanel alloc] init] animated:YES]; }
@@ -1662,7 +1756,10 @@ static void installEarnEnergyCollector(id controller) {
 - (void)toggleAutoFarmTasks:(UISwitch *)sender { AntForestManager.sharedInstance.enableAutoFarmTasks = sender.on; [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:@"enableAutoFarmTasks"]; [AntForestManager.sharedInstance recordStage:[NSString stringWithFormat:@"芭芭农场 · 做任务集肥料已%@", sender.on ? @"开启" : @"关闭"]]; }
 - (void)toggleAutoManor:(UISwitch *)sender { AntForestManager.sharedInstance.enableAutoManor = sender.on; [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:@"enableAutoManor"]; [AntForestManager.sharedInstance recordStage:[NSString stringWithFormat:@"蚂蚁庄园 · 功能已%@", sender.on ? @"开启" : @"关闭"]]; }
 - (void)toggleAutoPatrolNew:(UISwitch *)sender { AntForestManager.sharedInstance.enableAutoPatrolNew = sender.on; [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:@"enableAutoPatrolNew"]; [AntForestManager.sharedInstance recordStage:[NSString stringWithFormat:@"新版保护地（大富翁） · 功能已%@", sender.on ? @"开启" : @"关闭"]]; }
-- (void)close { [self dismissViewControllerAnimated:YES completion:nil]; }
+- (void)close {
+    [NSNotificationCenter.defaultCenter removeObserver:self name:@"AFChanceLedgerDidUpdate" object:nil];
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
 
 @end
 
@@ -2929,6 +3026,15 @@ static id portTransformResponseData(id self, SEL _cmd, id value) {
         }
     } @catch (NSException *e) {}
 #endif
+
+    // 抽奖机会账本：只镜像服务端返回的机会数，不发任何 RPC、不自动抽奖。
+    if ([AFChanceLedger sharedInstance].enabled) {
+        @try {
+            [[AFChanceLedger sharedInstance] mirrorChanceFromResponse:value];
+        } @catch (NSException *e) {
+            NSLog(@"[AFChanceLedger] 解析异常（已忽略）：%@", e);
+        }
+    }
 
     AntForestManager *manager = [AntForestManager sharedInstance];
     NSDictionary *dict = [value isKindOfClass:NSDictionary.class] ? value : nil;
