@@ -1,0 +1,31 @@
+name: Build AntForestPort dylib
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build iOS15 + iOS14 dylibs
+        run: make all
+
+      - name: Verify dylibs
+        run: |
+          ls -lh build/*.dylib
+          file build/*.dylib
+
+      - name: Upload dylibs
+        uses: actions/upload-artifact@v4
+        with:
+          name: AntForestPort-dylibs
+          path: build/*.dylib
+          if-no-files-found: error
