@@ -5892,9 +5892,9 @@ static BOOL isManorChanceTask(NSString *bizKey, NSString *title, NSDictionary *t
         NSInteger award = [task[@"awardCount"] integerValue] ?: ([task[@"canReceiveAwardCount"] integerValue] ?: 90);
         BOOL isChanceTask = isManorChanceTask(bizKey, title, task);
         
-        // 抽抽乐探针：把机会类任务的原始字段记录下来，便于真机验证与后续精调
+        // 抽抽乐探针：把机会类任务的原始字段写进常规日志（recordProbeLog 在编译期被关闭，日志面板看不到）
         if (isChanceTask) {
-            [self recordProbeLog:[NSString stringWithFormat:@"[抽抽乐] 识别到机会任务: bizKey=%@ taskId=%@ status=%@ mode=%@ award=%ld", bizKey, taskId, status, mode, (long)award]];
+            [self recordStage:[NSString stringWithFormat:@"🐔 抽抽乐·识别到机会任务: bizKey=%@ taskId=%@ status=%@ mode=%@ award=%ld", bizKey, taskId, status, mode, (long)award]];
         }
         
         if ([status isEqualToString:@"RECEIVED"]) {
