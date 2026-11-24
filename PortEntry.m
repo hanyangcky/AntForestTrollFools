@@ -106,6 +106,21 @@ static BOOL isLotteryURL(NSURL *url) {
            [text containsString:@"antforestdraw"];
 }
 
+// 蚂蚁庄园·抽抽乐活动页识别。抽抽乐可能以独立 render 页或庄园内嵌 H5 形式出现，
+// 这里用多重宽松关键词覆盖；命中后复用庄园现有的 listFarmTask/doFarmTask/receiveFarmTaskAward
+// 体系"做任务攒抽奖机会"（与原插件森林寻宝完全同款，不自动消耗机会抽奖）。
+static BOOL isChouchouURL(NSURL *url) {
+    if (!url) return NO;
+    NSString *text = [url.absoluteString lowercaseString];
+    if ([text containsString:@"chouchou"] ||
+        [text containsString:@"chouchoule"] ||
+        [text containsString:@"%e6%8a%bd%e6%8a%bd%e4%b9%90"]) return YES; // 抽抽乐 URL 编码
+    if ([text containsString:@"luckydraw"] ||
+        [text containsString:@"manordraw"] ||
+        ([text containsString:@"draw"] && ([text containsString:@"66666674"] || [text containsString:@"antfarm"]))) return YES;
+    return NO;
+}
+
 static BOOL isRewardTaskURL(NSURL *url) {
     if (!url) return NO;
     if (isEnergyRainURL(url)) return NO;
@@ -1599,7 +1614,7 @@ static void installEarnEnergyCollector(id controller) {
     UIButton *farmTasks = [self settingsButtonWithTitle:@"芭芭农场（做任务集肥料）" detail:@"手动进入芭芭农场后自动做部分浏览任务、游戏、连续签到和肥料领取。" icon:@"leaf.circle.fill" action:nil];
     UISwitch *farmTasksSwitch = [[UISwitch alloc] init]; farmTasksSwitch.on = AntForestManager.sharedInstance.enableAutoFarmTasks; farmTasksSwitch.translatesAutoresizingMaskIntoConstraints = NO; [farmTasksSwitch addTarget:self action:@selector(toggleAutoFarmTasks:) forControlEvents:UIControlEventValueChanged]; [farmTasks addSubview:farmTasksSwitch];
     
-    UIButton *manorTasks = [self settingsButtonWithTitle:@"蚂蚁庄园" detail:@"手动进入蚂蚁庄园后点击领饲料自动做部分任务、喂养与收饲料" icon:@"oval.portrait.fill" action:nil];
+    UIButton *manorTasks = [self settingsButtonWithTitle:@"蚂蚁庄园（含抽抽乐）" detail:@"进入庄园自动做任务/喂养/收饲料；进入抽抽乐自动做任务攒抽奖机会（不自动抽奖）" icon:@"oval.portrait.fill" action:nil];
     UISwitch *manorTasksSwitch = [[UISwitch alloc] init]; manorTasksSwitch.on = AntForestManager.sharedInstance.enableAutoManor; manorTasksSwitch.translatesAutoresizingMaskIntoConstraints = NO; [manorTasksSwitch addTarget:self action:@selector(toggleAutoManor:) forControlEvents:UIControlEventValueChanged]; [manorTasks addSubview:manorTasksSwitch];
     
     UIButton *patrolNew = [self settingsButtonWithTitle:@"新版保护地（大富翁）" detail:@"手动进入保护地后自动完成更多巡护步数任务" icon:@"dice.fill" action:nil];
@@ -2767,6 +2782,25 @@ static void portViewDidAppear(id self, SEL _cmd, BOOL animated) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(500 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
             [manager checkAndRunManorAutomations];
         });
+    }
+    // 蚂蚁庄园·抽抽乐：进入活动页时绑定庄园 Bridge，触发"做任务攒抽奖机会"
+    if (isChouchouURL(url) && manager.enableAutoManor) {
+        id bridge = rewardBridgeFromController(self) ?: forestBridgeFromController(self);
+        if (bridge && [bridge respondsToSelector:@selector(_doFlushMessageQueue:url:)]) {
+            if (manager.manorBridge != bridge) {
+                manager.manorBridge = bridge;
+                manager.manorH5Url = url.absoluteString;
+            }
+            [manager recordStage:@"🐔 抽抽乐：已进入活动页，开始自动做任务攒抽奖机会（不会自动消耗机会）..."];
+            // 探针：记录真实 URL，便于后续精调识别规则
+            [[AntForestManager sharedInstance] recordProbeLog:[NSString stringWithFormat:@"[抽抽乐] 页面URL: %@", url.absoluteString]];
+            NSArray<NSNumber *> *delays = @[@500, @1500, @3000];
+            for (NSNumber *d in delays) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)([d integerValue] * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                    [manager queryManorFarmTasks];
+                });
+            }
+        }
     }
     addLogButton(self, revealLeaf);
 }
