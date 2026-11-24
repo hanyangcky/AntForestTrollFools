@@ -5845,6 +5845,28 @@ static NSInteger extractTaskBrowseSeconds(NSDictionary *baseInfo, NSDictionary *
     [self recordStage:[NSString stringWithFormat:@"蚂蚁庄园：已提交领取“%@”（饲料奖励）...", title ?: taskId]];
 }
 
+// 抽抽乐/抽奖机会类任务识别：这类任务的奖励是"抽奖机会"而非饲料，
+// 绝不能套用只针对饲料背包容量的溢出保护，否则机会会被误判为"背包已满"而领不到。
+static BOOL isManorChanceTask(NSString *bizKey, NSString *title, NSDictionary *task) {
+    NSString *lowerKey = bizKey ? [bizKey lowercaseString] : @"";
+    NSString *lowerTitle = title ? [title lowercaseString] : @"";
+    if ([lowerKey containsString:@"chouchou"] || [lowerKey containsString:@"chouchoule"] ||
+        [lowerKey containsString:@"draw"] || [lowerKey containsString:@"lottery"] ||
+        [lowerKey containsString:@"chance"] ||
+        [lowerTitle containsString:@"抽抽乐"] || [lowerTitle containsString:@"抽奖"] ||
+        [lowerTitle containsString:@"机会"]) {
+        return YES;
+    }
+    NSString *awardType = [NSString stringWithFormat:@"%@",
+        task[@"awardType"] ?: task[@"prizeType"] ?: task[@"awardTypeDesc"] ?: task[@"awardName"] ?: @""];
+    NSString *lowerAward = [awardType lowercaseString];
+    if ([lowerAward containsString:@"draw"] || [lowerAward containsString:@"lottery"] ||
+        [lowerAward containsString:@"chance"] || [lowerAward containsString:@"机会"]) {
+        return YES;
+    }
+    return NO;
+}
+
 - (void)handleManorTaskList:(NSArray *)taskList {
     if (!isWithinTaskActiveHours()) return;
     if (!self.enableAutoManor || !taskList.count) return;
@@ -5868,6 +5890,12 @@ static NSInteger extractTaskBrowseSeconds(NSDictionary *baseInfo, NSDictionary *
         NSString *title = task[@"title"] ?: (bizKey.length ? bizKey : taskId);
         NSString *mode = task[@"taskMode"] ?: @"";
         NSInteger award = [task[@"awardCount"] integerValue] ?: ([task[@"canReceiveAwardCount"] integerValue] ?: 90);
+        BOOL isChanceTask = isManorChanceTask(bizKey, title, task);
+        
+        // 抽抽乐探针：把机会类任务的原始字段记录下来，便于真机验证与后续精调
+        if (isChanceTask) {
+            [self recordProbeLog:[NSString stringWithFormat:@"[抽抽乐] 识别到机会任务: bizKey=%@ taskId=%@ status=%@ mode=%@ award=%ld", bizKey, taskId, status, mode, (long)award]];
+        }
         
         if ([status isEqualToString:@"RECEIVED"]) {
             if ([bizKey isEqualToString:@"ANSWER"]) {
@@ -5879,8 +5907,9 @@ static NSInteger extractTaskBrowseSeconds(NSDictionary *baseInfo, NSDictionary *
         
         if ([status isEqualToString:@"FINISHED"]) {
             if (taskId.length) {
-                // 如果当前存量已达上限，或领取本项会导致超出上限溢出被吞，坚决不盲目领取！
-                if ((currentStock >= limit && limit > 0) || (limit > 0 && currentStock + award > limit)) {
+                // 饲料溢出保护只对"饲料奖励"生效；抽抽乐/抽奖机会类任务奖励是机会，
+                // 与饲料背包容量无关，必须跳过该保护，否则机会永远领不到。
+                if (!isChanceTask && ((currentStock >= limit && limit > 0) || (limit > 0 && currentStock + award > limit))) {
                     static NSTimeInterval lastFullLogTime = 0;
                     NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
                     if (now - lastFullLogTime > 60) {
@@ -5893,10 +5922,15 @@ static NSInteger extractTaskBrowseSeconds(NSDictionary *baseInfo, NSDictionary *
                 if (![gDailyCompletedTasks containsObject:claimKey]) {
                     [gDailyCompletedTasks addObject:claimKey];
                     saveDailyTaskCache();
-                    // 立即预累加虚拟存量，防止同批次后续任务并发领取造成溢出浪费
-                    currentStock += award;
-                    self.lastManorFoodStock = currentStock;
-                    [self recordStage:[NSString stringWithFormat:@"蚂蚁庄园：发现已完成任务“%@”，正在领取 %ldg 饲料（预估容量 %ldg/%ldg）...", title, (long)award, (long)currentStock, (long)limit]];
+                    if (isChanceTask) {
+                        // 机会奖励不计入饲料虚拟存量
+                        [self recordStage:[NSString stringWithFormat:@"🐔 抽抽乐：任务“%@”已完成，正在领取抽奖机会...", title]];
+                    } else {
+                        // 立即预累加虚拟存量，防止同批次后续任务并发领取造成溢出浪费
+                        currentStock += award;
+                        self.lastManorFoodStock = currentStock;
+                        [self recordStage:[NSString stringWithFormat:@"蚂蚁庄园：发现已完成任务“%@”，正在领取 %ldg 饲料（预估容量 %ldg/%ldg）...", title, (long)award, (long)currentStock, (long)limit]];
+                    }
                     [self receiveManorFarmTaskAwardWithTaskId:taskId title:title];
                 }
             }
@@ -5932,13 +5966,20 @@ static NSInteger extractTaskBrowseSeconds(NSDictionary *baseInfo, NSDictionary *
                 continue;
             }
             
-            // 针对 VIEW 或 TRIGGER 模式的浏览、逛一逛、功能开启类常规任务进行自动触发
-            if ([mode isEqualToString:@"VIEW"] || [mode isEqualToString:@"TRIGGER"]) {
+            // 针对 VIEW 或 TRIGGER 模式的浏览、逛一逛、功能开启类常规任务进行自动触发。
+            // 抽抽乐机会任务：即使模式字段为空或非标准值，只要通过上面的安全过滤，也尝试完成。
+            BOOL shouldDoTask = [mode isEqualToString:@"VIEW"] || [mode isEqualToString:@"TRIGGER"] ||
+                                (isChanceTask && mode.length == 0);
+            if (shouldDoTask && bizKey.length) {
                 NSString *taskKey = [NSString stringWithFormat:@"ANTFARM_FOOD_TASK:%@", bizKey];
                 if (![gDailyCompletedTasks containsObject:taskKey]) {
                     [gDailyCompletedTasks addObject:taskKey];
                     saveDailyTaskCache();
-                    [self recordStage:[NSString stringWithFormat:@"蚂蚁庄园：正在完成浏览任务“%@”...", title]];
+                    if (isChanceTask) {
+                        [self recordStage:[NSString stringWithFormat:@"🐔 抽抽乐：正在完成任务“%@”以累积抽奖机会...", title]];
+                    } else {
+                        [self recordStage:[NSString stringWithFormat:@"蚂蚁庄园：正在完成浏览任务“%@”...", title]];
+                    }
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(taskDelayIndex * 350 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
                         [self doManorFarmTaskWithBizKey:bizKey];
                     });
