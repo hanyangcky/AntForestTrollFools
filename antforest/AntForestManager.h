@@ -149,6 +149,11 @@ NS_ASSUME_NONNULL_BEGIN
 -(void)feedManorChicken;
 -(void)collectManorChickenManure;
 
+// 抽抽乐 v3.3.0：庄园 listFarmTask/doFarmTask/receiveFarmTaskAward 体系（.m 中实现，供 PortEntry 调用）
+-(void)queryManorFarmTasks;
+-(void)doManorFarmTaskWithBizKey:(NSString *)bizKey;
+-(void)receiveManorFarmTaskAwardWithTaskId:(NSString *)taskId title:(NSString *)title;
+
 -(void)queryTotalRank;
 -(void)queryRobFlag:(NSString*)uids;
 -(void)queryAccount:(NSString*)uids;
