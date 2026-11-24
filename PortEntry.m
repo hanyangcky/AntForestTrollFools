@@ -1614,7 +1614,7 @@ static void installEarnEnergyCollector(id controller) {
     UIButton *farmTasks = [self settingsButtonWithTitle:@"芭芭农场（做任务集肥料）" detail:@"手动进入芭芭农场后自动做部分浏览任务、游戏、连续签到和肥料领取。" icon:@"leaf.circle.fill" action:nil];
     UISwitch *farmTasksSwitch = [[UISwitch alloc] init]; farmTasksSwitch.on = AntForestManager.sharedInstance.enableAutoFarmTasks; farmTasksSwitch.translatesAutoresizingMaskIntoConstraints = NO; [farmTasksSwitch addTarget:self action:@selector(toggleAutoFarmTasks:) forControlEvents:UIControlEventValueChanged]; [farmTasks addSubview:farmTasksSwitch];
     
-    UIButton *manorTasks = [self settingsButtonWithTitle:@"蚂蚁庄园（含抽抽乐）" detail:@"进入庄园自动做任务/喂养/收饲料；进入抽抽乐自动做任务攒抽奖机会（不自动抽奖）" icon:@"oval.portrait.fill" action:nil];
+    UIButton *manorTasks = [self settingsButtonWithTitle:@"蚂蚁庄园（含抽抽乐 v3.3.0）" detail:@"进入庄园自动做任务/喂养/收饲料；进入抽抽乐自动做任务攒抽奖机会（不自动抽奖）" icon:@"oval.portrait.fill" action:nil];
     UISwitch *manorTasksSwitch = [[UISwitch alloc] init]; manorTasksSwitch.on = AntForestManager.sharedInstance.enableAutoManor; manorTasksSwitch.translatesAutoresizingMaskIntoConstraints = NO; [manorTasksSwitch addTarget:self action:@selector(toggleAutoManor:) forControlEvents:UIControlEventValueChanged]; [manorTasks addSubview:manorTasksSwitch];
     
     UIButton *patrolNew = [self settingsButtonWithTitle:@"新版保护地（大富翁）" detail:@"手动进入保护地后自动完成更多巡护步数任务" icon:@"dice.fill" action:nil];
@@ -1954,7 +1954,7 @@ static void installEarnEnergyCollector(id controller) {
 
     [self.view addSubview:grabber];
     UILabel *versionLabel = [[UILabel alloc] init];
-    versionLabel.text = @"当前版本：v3.2.8 正式版";
+    versionLabel.text = @"当前版本：v3.3.0-chouche（抽抽乐版）";
     versionLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightRegular];
     versionLabel.textColor = [UIColor systemGray2Color];
     versionLabel.textAlignment = NSTextAlignmentCenter;
