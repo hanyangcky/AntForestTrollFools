@@ -2601,6 +2601,17 @@ static void portViewDidAppear(id self, SEL _cmd, BOOL animated) {
 
     AntForestManager *manager = [AntForestManager sharedInstance];
     
+    // 🐔 抽抽乐适配探针：开启庄园开关时，把当前 H5 页面真实 URL 写入常规日志，
+    // 便于真机确认抽抽乐页面网址（同一网址只记一次，避免刷屏）。
+    // 注意：recordProbeLog 在 AntForestManager.m 里被编译开关关闭，必须走 recordStage。
+    if (manager.enableAutoManor && url.absoluteString.length) {
+        static NSString *lastProbedPageURL = nil;
+        if (![lastProbedPageURL isEqualToString:url.absoluteString]) {
+            lastProbedPageURL = [url.absoluteString copy];
+            [manager recordStage:[NSString stringWithFormat:@"🐔 页面URL探针: %@", url.absoluteString]];
+        }
+    }
+    
     // 第一优先级：能量雨快速判定并彻底返回，绝不执行任何森林首页、巡护、寻宝逻辑
     if (isEnergyRain(url, self)) {
         if (manager.enableAutoRain) {
@@ -2792,8 +2803,8 @@ static void portViewDidAppear(id self, SEL _cmd, BOOL animated) {
                 manager.manorH5Url = url.absoluteString;
             }
             [manager recordStage:@"🐔 抽抽乐：已进入活动页，开始自动做任务攒抽奖机会（不会自动消耗机会）..."];
-            // 探针：记录真实 URL，便于后续精调识别规则
-            [[AntForestManager sharedInstance] recordProbeLog:[NSString stringWithFormat:@"[抽抽乐] 页面URL: %@", url.absoluteString]];
+            // 用 recordStage 写入常规日志（recordProbeLog 在本文件编译开关下会被直接跳过，日志面板看不到）
+            [manager recordStage:[NSString stringWithFormat:@"🐔 抽抽乐·识别到页面URL: %@", url.absoluteString]];
             NSArray<NSNumber *> *delays = @[@500, @1500, @3000];
             for (NSNumber *d in delays) {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)([d integerValue] * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
